@@ -7,7 +7,7 @@ resource "terraform_data" "my_ip" {
 }
 
 data "local_file" "my-ip" {
-  filename = "/tmp/my_ip.txt"
+  filename   = "/tmp/my_ip.txt"
   depends_on = [terraform_data.my_ip]
 }
 
@@ -25,12 +25,11 @@ resource "aws_security_group" "allow_ssh" {
   }
 
   ingress {
-    description = "nginx"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
+    description     = "lb"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lb_sg.id]
   }
 
   egress {
@@ -71,19 +70,21 @@ resource "aws_key_pair" "this" {
 }
 
 resource "aws_instance" "nginx" {
+  count         = 4
   ami           = "ami-0c101f26f147fa7fd"
   instance_type = "t2.micro"
 
   tags = {
-    Name = "master"
+    Name = "webserver"
   }
 
   vpc_security_group_ids = [aws_security_group.allow_ssh.id]
-  subnet_id              = aws_subnet.public.id
+  subnet_id              = aws_subnet.public[count.index].id
   key_name               = aws_key_pair.this.key_name
   user_data              = <<-EOT
 		#!/bin/bash
-		yum install nginx python -y
+		yum install nginx -y
+        sed -i "s/Welcome to nginx\!/Welcome to nginx ${aws_subnet.public[count.index].availability_zone}/" /usr/share/nginx/html/index.html
         systemctl start nginx
 		EOT
 }
